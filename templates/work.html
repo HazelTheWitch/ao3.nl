@@ -7,11 +7,11 @@
     <meta content="article" property="og:type" />
     <meta content="{{ title }}" property="og:title" />
     <meta content="{{ description }}" property="og:description" />
-    <meta content="https://archiveofourown.org/works/{{ id|escape }}" property="og:url" />
-    <meta http-equiv="Refresh" content="0; url='https://archiveofourown.org/works/{{ id|escape }}'" />
-    <link rel="alternate" type="application/json+oembed" href="{{ host }}/oembed/{{ id|escape }}/{{ author|escape }}/{{ words|escape }}/{{ chapters|escape }}/{{ date|escape }}">
+    <meta content="https://archiveofourown.org/works/{{ id }}" property="og:url" />
+    <meta http-equiv="Refresh" content="0; url='https://archiveofourown.org/works/{{ id }}'" />
+    <link rel="alternate" type="application/json+oembed" href="{{ embed_url }}">
 </head>
 <body>
-    <a href="https://archiveofourown.org/works/{{ id|escape }}">You should have been redirected, here is a link to the original post.</a>
+    <a href="https://archiveofourown.org/works/{{ id }}">You should have been redirected, here is a link to the original post.</a>
 </body>
 </html>

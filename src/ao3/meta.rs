@@ -65,24 +65,30 @@ pub struct WorkTemplate {
     pub id: u64,
     pub title: String,
     pub author: String,
-    pub words: u64,
-    pub chapters: String,
-    pub date: String,
     pub description: String,
-    pub host: String,
+    pub embed_url: String,
 }
 
 impl Into<WorkTemplate> for WorkMetadata {
+    // {{ host }}/oembed/{{ id|escape }}/{{ author|escape }}/{{ words|escape }}/{{ chapters|escape }}/{{ date|escape }}
+
     fn into(self) -> WorkTemplate {
+        let embed_url = format!(
+            "{}/oembed/{}/{}/{}/{}/{}",
+            env::var("HOST").unwrap_or_else(|_| String::from("http://localhost:3000")),
+            self.id,
+            &self.author,
+            &self.words,
+            format!("{} / {}", self.chapter, self.total_chapters
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| String::from("?"))),
+            &self.published_date
+        );
+
         WorkTemplate {
             id: self.id,
             title: self.title,
             author: self.author,
-            words: self.words,
-            chapters: format!("{} / {}", self.chapter, self.total_chapters
-                .map(|c| c.to_string())
-                .unwrap_or_else(|| String::from("?"))),
-            date: self.published_date,
             description: {
                 let warnings = join_quoted(self.warnings);
                 let characters = join_quoted(self.characters);
@@ -90,7 +96,7 @@ impl Into<WorkTemplate> for WorkMetadata {
 
                 format!("{}\n{}\n{}", warnings, characters, tags)
             },
-            host: env::var("HOST").unwrap_or_else(|_| String::from("http://localhost:3000")),
+            embed_url,
         }
     }
 }
