@@ -70,8 +70,6 @@ pub struct WorkTemplate {
 }
 
 impl Into<WorkTemplate> for WorkMetadata {
-    // {{ host }}/oembed/{{ id|escape }}/{{ author|escape }}/{{ words|escape }}/{{ chapters|escape }}/{{ date|escape }}
-
     fn into(self) -> WorkTemplate {
         let embed_url = format!(
             "{}/oembed/{}/{}/{}/{}/{}",

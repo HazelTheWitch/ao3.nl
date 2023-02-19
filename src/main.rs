@@ -117,6 +117,7 @@ struct EmbedRequest {
 async fn embed_response(
     Path(EmbedRequest { id, author, words, chapters, date }): Path<EmbedRequest>,
 ) -> Json<EmbedResponse> {
+    tracing::info!("Embed Request ID: {}", id);
     Json(EmbedResponse {
         version: "1.0",
         embed_type: "rich",
