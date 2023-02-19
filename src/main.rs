@@ -1,7 +1,7 @@
 use std::{sync::Arc, env};
 
 use ao3_embed::ao3::meta::{WorkMetadata, WorkTemplate};
-use axum::{Router, extract::{State, Path}, response::{IntoResponse, Response, Redirect, Html}, routing::get, Json, TypedHeader, headers::UserAgent};
+use axum::{Router, extract::{State, Path, OriginalUri}, response::{IntoResponse, Response, Redirect, Html}, routing::get, Json, TypedHeader, headers::UserAgent, http::Uri};
 use isbot::Bots;
 use moka::future::Cache;
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,7 @@ async fn main() {
         .route("/works/:id/*path", get(work_response))
         .route("/works/:id", get(work_response))
         .route("/oembed/:id/:author/:words/:chapters/:date", get(embed_response))
+        .fallback(ao3_redirect)
         .with_state(state);
 
     let addr = format!("[::]:{}", env::var("PORT").unwrap_or("3000".to_owned())).parse().unwrap();
@@ -24,6 +25,21 @@ async fn main() {
         .serve(app.into_make_service())
         .await
         .unwrap();
+}
+
+async fn ao3_redirect(OriginalUri(uri): OriginalUri) -> impl IntoResponse {
+    let Some(path_and_query) = uri.path_and_query() else {
+        return Redirect::temporary("https://archiveofourown.org/");
+    };
+
+    let redirect_uri = Uri::builder()
+        .scheme("https")
+        .authority("archiveofourown.org")
+        .path_and_query(path_and_query.as_str())
+        .build()
+        .unwrap();
+
+    Redirect::temporary(&redirect_uri.to_string())
 }
 
 #[derive(Deserialize)]
