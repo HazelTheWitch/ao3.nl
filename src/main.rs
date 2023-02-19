@@ -56,6 +56,7 @@ async fn work_response(
     let bots = Bots::default();
     
     if !bots.is_bot(user_agent.as_str()) {
+        tracing::info!("IS BOT: Redirecting");
         return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
     }
 
@@ -69,17 +70,22 @@ async fn work_response(
         None => match WorkMetadata::work(id).await {
             Ok(work) => {
                 work_cache.insert(id, work.clone()).await;
+
+                tracing::info!("Caching ID: {}", id);
+
                 Some(work)
             },
             Err(_) => None,
         }
     }) else {
+        tracing::warn!("Could not retrieve meta.");
         return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
     };
 
     let template: WorkTemplate = work.into();
 
     let Ok(html) = template.render_html() else {
+        tracing::warn!("Error templating meta.");
         return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
     };
 
