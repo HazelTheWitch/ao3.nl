@@ -55,7 +55,6 @@ pub struct WorkMetadata {
 
 fn join_quoted(strings: Vec<String>) -> String {
     strings.into_iter()
-        .map(|s| format!(r#""{}""#, s))
         .intersperse_with(|| String::from(", "))
         .collect()
 }
