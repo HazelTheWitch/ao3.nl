@@ -53,12 +53,12 @@ async fn work_response(
     State(work_cache): State<Arc<Cache<u64, WorkMetadata>>>,
     TypedHeader(user_agent): TypedHeader<UserAgent>,
 ) -> Response {
-    let bots = Bots::default();
+    // let bots = Bots::default();
     
-    if !bots.is_bot(user_agent.as_str()) {
-        tracing::info!("IS BOT: Redirecting");
-        return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
-    }
+    // if !bots.is_bot(user_agent.as_str()) {
+    //     tracing::info!("IS BOT: Redirecting");
+    //     return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
+    // }
 
     let work_cache = work_cache.clone();
 
