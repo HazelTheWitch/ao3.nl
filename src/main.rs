@@ -16,7 +16,7 @@ async fn main() {
     let app = Router::new()
         .route("/works/:id/*path", get(work_response))
         .route("/works/:id", get(work_response))
-        .route("/oembed/:id/:author/:words/:chapters/:date", get(embed_response))
+        .route("/oembed/:id/:author/:words/:chapters/:total_chapters/:date", get(embed_response))
         .fallback(ao3_redirect)
         .layer(NormalizePathLayer::trim_trailing_slash())
         .with_state(state);
@@ -53,12 +53,12 @@ async fn work_response(
     State(work_cache): State<Arc<Cache<u64, WorkMetadata>>>,
     TypedHeader(user_agent): TypedHeader<UserAgent>,
 ) -> Response {
-    // let bots = Bots::default();
+    let bots = Bots::default();
     
-    // if !bots.is_bot(user_agent.as_str()) {
-    //     tracing::info!("IS BOT: Redirecting");
-    //     return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
-    // }
+    if !bots.is_bot(user_agent.as_str()) {
+        tracing::info!("IS BOT: Redirecting");
+        return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
+    }
 
     let work_cache = work_cache.clone();
 
@@ -108,18 +108,19 @@ struct EmbedRequest {
     pub id: u64,
     pub author: String,
     pub words: u64,
-    pub chapters: String,
+    pub chapters: u16,
+    pub total_chapters: String,
     pub date: String,
 }
 
 async fn embed_response(
-    Path(EmbedRequest { id, author, words, chapters, date }): Path<EmbedRequest>,
+    Path(EmbedRequest { id, author, words, chapters, total_chapters, date }): Path<EmbedRequest>,
 ) -> Json<EmbedResponse> {
     tracing::info!("Embed Request ID: {}", id);
     Json(EmbedResponse {
         version: "1.0",
         embed_type: "rich",
-        author_name: format!("{} ✏️ {} 📚 {} 🕒", words, chapters, date),
+        author_name: format!("{} ✏️ {} / {} 📚 {} 🕒", words, chapters, total_chapters, date),
         author_url: format!("https://archiveofourown.org/works/{}", urlencoding::encode(&id.to_string())),
         provider_name: author.clone(),
         provider_url: format!("https://archiveofourown.org/users/{}", urlencoding::encode(&author)),

@@ -72,14 +72,15 @@ pub struct WorkTemplate {
 impl Into<WorkTemplate> for WorkMetadata {
     fn into(self) -> WorkTemplate {
         let embed_url = format!(
-            "{}/oembed/{}/{}/{}/{}/{}",
+            "{}/oembed/{}/{}/{}/{}/{}/{}",
             env::var("HOST").unwrap_or_else(|_| String::from("http://localhost:3000")),
             self.id,
             urlencoding::encode(&self.author),
             self.words,
-            urlencoding::encode(&format!("{} %2F {}", self.chapter, self.total_chapters
+            self.chapter,
+            self.total_chapters
                 .map(|c| c.to_string())
-                .unwrap_or_else(|| String::from("?")))),
+                .unwrap_or_else(|| String::from("?")),
             urlencoding::encode(&self.published_date)
         );
 
