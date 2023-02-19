@@ -34,6 +34,8 @@ async fn ao3_redirect(OriginalUri(uri): OriginalUri) -> impl IntoResponse {
         return Redirect::temporary("https://archiveofourown.org/");
     };
 
+    tracing::info!("Redirecting to: {}", path_and_query.as_str());
+
     let redirect_uri = Uri::builder()
         .scheme("https")
         .authority("archiveofourown.org")
