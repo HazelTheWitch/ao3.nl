@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <meta content="ao3.nl" property="og:site_name" />
+    <meta content="article" property="og:type" />
+    <meta content="{{ title }}" property="og:title" />
+    <meta content="{{ description }}" property="og:description" />
+    <meta content="https://archiveofourown.org/works/{{ id|escape }}" property="og:url" />
+    <meta http-equiv="Refresh" content="0; url='https://archiveofourown.org/works/{{ id|escape }}'" />
+    <link rel="alternate" type="application/json+oembed" href="{{ host }}/{{ id|escape }}/{{ author|escape }}/{{ words|escape }}/{{ chapters|escape }}/{{ date|escape }}">
+</head>
+<body>
+    <a href="https://archiveofourown.org/works/{{ id|escape }}">You should have been redirected, here is a link to the original post.</a>
+</body>
+</html>

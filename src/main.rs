@@ -1,0 +1,104 @@
+use std::{sync::Arc, env};
+
+use ao3_embed::ao3::meta::{WorkMetadata, WorkTemplate};
+use axum::{Router, extract::{State, Path}, response::{IntoResponse, Response, Redirect, Html}, routing::get, Json, TypedHeader, headers::UserAgent};
+use isbot::Bots;
+use moka::future::Cache;
+use serde::{Deserialize, Serialize};
+
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt::fmt().with_file(true).init();
+
+    let state: Arc<Cache<u64, WorkMetadata>> = Arc::new(Cache::new(100));
+
+    let app = Router::new()
+        .route("/works/:id/*path", get(work_response))
+        .route("/works/:id", get(work_response))
+        .route("/oembed/:id/:author/:words/:chapters/:date", get(embed_response))
+        .with_state(state);
+
+    let addr = format!("[::]:{}", env::var("PORT").unwrap_or("3000".to_owned())).parse().unwrap();
+
+    axum::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+}
+
+#[derive(Deserialize)]
+struct WorkPath {
+    pub id: u64,
+    pub path: Option<String>, 
+}
+
+async fn work_response(
+    Path(WorkPath { id, path }): Path<WorkPath>,
+    State(work_cache): State<Arc<Cache<u64, WorkMetadata>>>,
+    TypedHeader(user_agent): TypedHeader<UserAgent>,
+) -> Response {
+    let bots = Bots::default();
+    
+    if !bots.is_bot(user_agent.as_str()) {
+        return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
+    }
+
+    let work_cache = work_cache.clone();
+
+    let Some(work) = (match work_cache.get(&id) {
+        Some(work) => {
+            tracing::info!("Using cached for {}", id);
+            Some(work)
+        },
+        None => match WorkMetadata::work(id).await {
+            Ok(work) => {
+                work_cache.insert(id, work.clone()).await;
+                Some(work)
+            },
+            Err(_) => None,
+        }
+    }) else {
+        return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
+    };
+
+    let template: WorkTemplate = work.into();
+
+    let Ok(html) = template.render_html() else {
+        return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
+    };
+
+    Html(html).into_response()
+}
+
+#[derive(Serialize)]
+struct EmbedResponse {
+    pub version: &'static str,
+    #[serde(rename = "type")]
+    pub embed_type: &'static str,
+    pub author_name: String,
+    pub author_url: String,
+    pub provider_name: String,
+    pub provider_url: String,
+}
+
+#[derive(Deserialize)]
+struct EmbedRequest {
+    pub id: u64,
+    pub author: String,
+    pub words: u64,
+    pub chapters: String,
+    pub date: String,
+}
+
+async fn embed_response(
+    Path(EmbedRequest { id, author, words, chapters, date }): Path<EmbedRequest>,
+) -> Json<EmbedResponse> {
+    Json(EmbedResponse {
+        version: "1.0",
+        embed_type: "rich",
+        author_name: format!("{} ✏️ {} 📚 {} 🕒", words, chapters, date),
+        author_url: format!("https://archiveofourown.org/works/{}", urlencoding::encode(&id.to_string())),
+        provider_name: author.clone(),
+        provider_url: format!("https://archiveofourown.org/users/{}", urlencoding::encode(&author)),
+    })
+}
