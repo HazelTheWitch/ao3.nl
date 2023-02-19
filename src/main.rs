@@ -5,6 +5,7 @@ use axum::{Router, extract::{State, Path, OriginalUri}, response::{IntoResponse,
 use isbot::Bots;
 use moka::future::Cache;
 use serde::{Deserialize, Serialize};
+use tower_http::normalize_path::NormalizePathLayer;
 
 #[tokio::main]
 async fn main() {
@@ -17,6 +18,7 @@ async fn main() {
         .route("/works/:id", get(work_response))
         .route("/oembed/:id/:author/:words/:chapters/:date", get(embed_response))
         .fallback(ao3_redirect)
+        .layer(NormalizePathLayer::trim_trailing_slash())
         .with_state(state);
 
     let addr = format!("[::]:{}", env::var("PORT").unwrap_or("3000".to_owned())).parse().unwrap();
@@ -53,12 +55,12 @@ async fn work_response(
     State(work_cache): State<Arc<Cache<u64, WorkMetadata>>>,
     TypedHeader(user_agent): TypedHeader<UserAgent>,
 ) -> Response {
-    // let bots = Bots::default();
+    let bots = Bots::default();
     
-    // if !bots.is_bot(user_agent.as_str()) {
-    //     tracing::info!("IS BOT: Redirecting");
-    //     return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
-    // }
+    if !bots.is_bot(user_agent.as_str()) {
+        tracing::info!("IS BOT: Redirecting");
+        return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
+    }
 
     let work_cache = work_cache.clone();
 

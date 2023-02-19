@@ -77,12 +77,12 @@ impl Into<WorkTemplate> for WorkMetadata {
             "{}/oembed/{}/{}/{}/{}/{}",
             env::var("HOST").unwrap_or_else(|_| String::from("http://localhost:3000")),
             self.id,
-            &self.author,
-            &self.words,
-            format!("{} / {}", self.chapter, self.total_chapters
+            urlencoding::encode(&self.author),
+            self.words,
+            urlencoding::encode(&format!("{} / {}", self.chapter, self.total_chapters
                 .map(|c| c.to_string())
-                .unwrap_or_else(|| String::from("?"))),
-            &self.published_date
+                .unwrap_or_else(|| String::from("?")))),
+            urlencoding::encode(&self.published_date)
         );
 
         WorkTemplate {
