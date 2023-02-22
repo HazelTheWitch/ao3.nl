@@ -7,31 +7,32 @@ use serde::Serialize;
 use thiserror::Error;
 use askama::Template;
 
-use itertools::Itertools;
-
 use nom::{
     IResult, bytes, combinator::{opt, map_res, recognize}, character::complete::digit1
 };
 
 lazy_static! {
-    static ref WORK: Selector = Selector::parse(".work").unwrap();
-    static ref WORK_HEADER: Selector = Selector::parse("div.header.module").unwrap();
-    static ref TITLE: Selector = Selector::parse("h4>a:nth-child(1)").unwrap();
-    static ref AUTHOR: Selector = Selector::parse("h4>a:nth-child(2)").unwrap();
-    static ref FANDOMS: Selector = Selector::parse(".fandoms").unwrap();
-    static ref DATE: Selector = Selector::parse(".datetime").unwrap();
-    static ref TAG: Selector = Selector::parse(".tag").unwrap();
-    static ref WARNINGS: Selector = Selector::parse(".warnings>strong>a").unwrap();
-    static ref RELATIONSHIPS: Selector = Selector::parse(".relationships>a").unwrap();
-    static ref CHARACTERS: Selector = Selector::parse(".characters>a").unwrap();
-    static ref TAGS: Selector = Selector::parse(".freeforms>a").unwrap();
-    static ref STATS: Selector = Selector::parse("dl.stats").unwrap();
+    static ref TAG: Selector = Selector::parse("a.tag").unwrap();
+
+    static ref TITLE: Selector = Selector::parse("h2.title").unwrap();
+    static ref AUTHOR: Selector = Selector::parse(r#"a[rel="author"]"#).unwrap();
+
+    static ref META_BLOCK: Selector = Selector::parse("dl.work").unwrap();
+
+    static ref RATING: Selector = Selector::parse("dd.rating").unwrap();
+    static ref WARNING: Selector = Selector::parse("dd.warning").unwrap();
+    static ref CATEGORY: Selector = Selector::parse("dd.category").unwrap();
+    static ref FANDOMS: Selector = Selector::parse("dd.fandom").unwrap();
+    static ref RELATIONSHIPS: Selector = Selector::parse("dd.relationship").unwrap();
+    static ref CHARACTERS: Selector = Selector::parse("dd.character").unwrap();
+    static ref FREEFORMS: Selector = Selector::parse("dd.freeform").unwrap();
     static ref LANGUAGE: Selector = Selector::parse("dd.language").unwrap();
+
+    static ref STATS_BLOCK: Selector = Selector::parse("dl.stats").unwrap();
+    
+    static ref PUBLISHED_DATE: Selector = Selector::parse("dd.published").unwrap();
     static ref WORDS: Selector = Selector::parse("dd.words").unwrap();
     static ref CHAPTERS: Selector = Selector::parse("dd.chapters").unwrap();
-    static ref KUDOS: Selector = Selector::parse("dd.kudos>a").unwrap();
-    static ref HITS: Selector = Selector::parse("dd.hits").unwrap();
-    static ref SUMMARY: Selector = Selector::parse("blockquote.summary").unwrap();
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -45,12 +46,10 @@ pub struct WorkMetadata {
     pub relationships: Vec<String>,
     pub characters: Vec<String>,
     pub tags: Vec<String>,
-    pub language: Option<String>,
-    pub words: u64,
+    pub language: String,
+    pub words: String,
     pub chapter: u16,
     pub total_chapters: Option<u16>,
-    pub kudos: u32,
-    pub hits: u64,
 }
 
 fn join_quoted(strings: Vec<String>) -> String {
@@ -142,64 +141,30 @@ fn chapters(input: &str) -> IResult<&str, (u16, Option<u16>)> {
     Ok((input, (chapter_value, total_chapters)))
 }
 
-impl TryFrom<(u64, ElementRef<'_>)> for WorkMetadata {
-    type Error = WorkError;
+struct Tag {
+    pub href: Option<String>,
+    pub text: String,
+}
 
-    fn try_from((id, work): (u64, ElementRef)) -> Result<Self, Self::Error> {
-        let header = work.select(&WORK_HEADER).next().ok_or(WorkError::ParsingError)?;
-
-        let title = header.select(&TITLE).next().ok_or(WorkError::ParsingError)?.inner_html();
-        let author = header.select(&AUTHOR).next().ok_or(WorkError::ParsingError)?.inner_html();
-        let fandoms = header.select(&FANDOMS).flat_map(|e|
-            Some(e.select(&TAG)
-                .next()?
-                .inner_html())
-        ).collect::<Vec<String>>();
-        let date = header.select(&DATE).next().ok_or(WorkError::ParsingError)?.inner_html();
-
-        let warnings = work.select(&WARNINGS).map(|e| e.inner_html()).collect::<Vec<String>>();
-        let relationships = work.select(&RELATIONSHIPS).map(|e| e.inner_html()).collect::<Vec<String>>();
-        let characters = work.select(&CHARACTERS).map(|e| e.inner_html()).collect::<Vec<String>>();
-        let tags = work.select(&TAGS).map(|e| e.inner_html()).collect::<Vec<String>>();
-
-        let stats = work.select(&STATS).next().ok_or(WorkError::ParsingError)?;
-
-        let language = stats.select(&LANGUAGE).next().map(|e| e.inner_html());
-        let words = stats.select(&WORDS).next().ok_or(WorkError::ParsingError)?.inner_html().replace(",", "").parse::<u64>().ok().ok_or(WorkError::ParsingError)?;
-        let chapters_string = stats.select(&CHAPTERS).next().ok_or(WorkError::ParsingError)?.inner_html();
-
-
-        let (chapter_value, total_chapters) = match chapters(&chapters_string) {
-            Ok(("", (chapter, total))) => (chapter, total),
-            _ => return Err(WorkError::ParsingError),
-        };
-
-        let kudos = stats.select(&KUDOS).next().ok_or(WorkError::ParsingError)?.inner_html().replace(",", "").parse::<u32>().ok().ok_or(WorkError::ParsingError)?;
-        let hits = stats.select(&HITS).next().ok_or(WorkError::ParsingError)?.inner_html().replace(",", "").parse::<u64>().ok().ok_or(WorkError::ParsingError)?;
-
-        Ok(WorkMetadata {
-            id,
-            title,
-            author,
-            published_date: date,
-            fandoms,
-            warnings,
-            relationships,
-            characters,
-            tags,
-            language,
-            words,
-            chapter: chapter_value,
-            total_chapters,
-            kudos,
-            hits,
+fn get_tags(element: ElementRef) -> impl Iterator<Item = Tag> + '_ {
+    element
+        .select(&TAG)
+        .map(|t| Tag {
+            href: t
+                .value()
+                .attr("href")
+                .map(String::from),
+            text: t.inner_html()
         })
-    }
+}
+
+fn select_one<'a>(parent: &ElementRef<'a>, selector: &'a Selector) -> Result<ElementRef<'a>, WorkError> {
+    parent.select(selector).next().ok_or(WorkError::WorkError)
 }
 
 impl WorkMetadata {
     pub async fn work(id: u64) -> Result<Self, WorkError> {
-        let url = format!("https://archiveofourown.org/works/{}", id);
+        let url = format!("https://archiveofourown.org/works/{}?view_adult=true", id);
 
         let html = reqwest::get(url)
             .await?
@@ -208,6 +173,83 @@ impl WorkMetadata {
 
         let html = Html::parse_document(&html);
 
-        Ok((id, html.select(&WORK).next().ok_or(WorkError::WorkError)?).try_into()?)
+        let meta = html.select(&META_BLOCK).next().ok_or(WorkError::WorkError)?;
+        let stats = meta.select(&STATS_BLOCK).next().ok_or(WorkError::WorkError)?;
+        
+        let title = html.select(&TITLE)
+            .next()
+            .ok_or(WorkError::WorkError)?
+            .inner_html();
+
+        let author_element = html.select(&AUTHOR)
+            .next()
+            .ok_or(WorkError::WorkError)?;
+
+        let author = author_element.inner_html();
+        let author_link = author_element
+            .value()
+            .attr("href")
+            .ok_or(WorkError::WorkError)?
+            .to_string();
+
+        let rating = get_tags(select_one(&meta, &RATING)?)
+            .next()
+            .ok_or(WorkError::WorkError)?
+            .text;
+
+        let warnings = get_tags(select_one(&meta, &WARNING)?)
+            .map(|t| t.text)
+            .collect::<Vec<_>>();
+
+        let category = get_tags(select_one(&meta, &CATEGORY)?)
+            .next()
+            .ok_or(WorkError::WorkError)?
+            .text;
+
+        let fandoms = get_tags(select_one(&meta, &FANDOMS)?)
+            .map(|t| t.text)
+            .collect::<Vec<_>>();
+
+        let relationships = get_tags(select_one(&meta, &RELATIONSHIPS)?)
+            .map(|t| t.text)
+            .collect::<Vec<_>>();
+
+        let characters = get_tags(select_one(&meta, &CHARACTERS)?)
+            .map(|t| t.text)
+            .collect::<Vec<_>>();
+
+        let freeforms = get_tags(select_one(&meta, &FREEFORMS)?)
+            .map(|t| t.text)
+            .collect::<Vec<_>>();
+
+        let language = get_tags(select_one(&meta, &LANGUAGE)?)
+            .next()
+            .ok_or(WorkError::WorkError)?
+            .text;
+
+        let published_date = select_one(&stats, &PUBLISHED_DATE)?.inner_html();
+        let words = select_one(&stats, &WORDS)?.inner_html().replace(",", "");
+        let chapters_string = select_one(&stats, &CHAPTERS)?.inner_html();
+
+        let (chapter, total_chapters) = match chapters(&chapters_string) {
+            Ok(("", (chapter, total))) => (chapter, total),
+            _ => return Err(WorkError::ParsingError),
+        };
+
+        Ok(Self {
+            id,
+            title,
+            author,
+            published_date,
+            fandoms,
+            warnings,
+            relationships,
+            characters,
+            tags: freeforms,
+            language,
+            words,
+            chapter,
+            total_chapters,
+        })
     }
 }
