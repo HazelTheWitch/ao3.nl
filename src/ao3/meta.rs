@@ -1,4 +1,4 @@
-use std::{string::FromUtf8Error, env};
+use std::{string::FromUtf8Error, env, num::ParseIntError};
 
 use lazy_static::lazy_static;
 use minify_html::{Cfg, minify};
@@ -10,6 +10,8 @@ use askama::Template;
 use nom::{
     IResult, bytes, combinator::{opt, map_res, recognize}, character::complete::digit1
 };
+
+use crate::EmbedRequest;
 
 lazy_static! {
     static ref TAG: Selector = Selector::parse("a.tag").unwrap();
@@ -48,8 +50,7 @@ pub struct WorkMetadata {
     pub relationships: Vec<String>,
     pub characters: Vec<String>,
     pub tags: Vec<String>,
-    pub language: String,
-    pub words: String,
+    pub words: u64,
     pub chapter: u16,
     pub total_chapters: Option<u16>,
 }
@@ -74,17 +75,19 @@ pub struct WorkTemplate {
 
 impl From<WorkMetadata> for WorkTemplate {
     fn from(work: WorkMetadata) -> Self {
+        let embed_request = EmbedRequest {
+            id: work.id,
+            author: work.author.clone(),
+            words: work.words,
+            chapters: work.chapter,
+            total_chapters: work.total_chapters.map(|c| c.to_string()).unwrap_or_else(|| String::from("?")),
+            date: work.published_date,
+        };
+
         let embed_url = format!(
-            "{}/oembed/{}/{}/{}/{}/{}/{}",
+            "{}/oembed?{}",
             env::var("HOST").unwrap_or_else(|_| String::from("http://localhost:3000")),
-            work.id,
-            urlencoding::encode(&work.author),
-            work.words,
-            work.chapter,
-            work.total_chapters
-                .map(|c| c.to_string())
-                .unwrap_or_else(|| String::from("?")),
-            urlencoding::encode(&work.published_date)
+            serde_urlencoded::to_string(embed_request).unwrap(),
         );
 
         Self {
@@ -132,6 +135,8 @@ pub enum WorkError {
     TemplatingError(#[from] askama::Error),
     #[error("minifying error")]
     Minify(#[from] FromUtf8Error),
+    #[error("could not parse int")]
+    IntError(#[from] ParseIntError),
 }
 
 
@@ -228,13 +233,14 @@ impl WorkMetadata {
             .map(|t| t.text)
             .collect::<Vec<_>>();
 
-        let language = get_tags(select_one(&meta, &LANGUAGE)?)
-            .next()
-            .ok_or(WorkError::WorkError)?
-            .text;
+        // let language = get_tags(select_one(&meta, &LANGUAGE)?)
+        //     .next()
+        //     .ok_or(WorkError::WorkError)?
+        //     .text;
+
 
         let published_date = select_one(&stats, &PUBLISHED_DATE)?.inner_html();
-        let words = select_one(&stats, &WORDS)?.inner_html().replace(",", "");
+        let words = select_one(&stats, &WORDS)?.inner_html().replace(",", "").parse::<u64>()?;
         let chapters_string = select_one(&stats, &CHAPTERS)?.inner_html();
 
         let (chapter, total_chapters) = match chapters(&chapters_string) {
@@ -254,7 +260,6 @@ impl WorkMetadata {
             relationships,
             characters,
             tags: freeforms,
-            language,
             words,
             chapter,
             total_chapters,

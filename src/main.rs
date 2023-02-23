@@ -1,7 +1,7 @@
 use std::{sync::Arc, env};
 
-use ao3_embed::ao3::meta::{WorkMetadata, WorkTemplate};
-use axum::{Router, extract::{State, Path, OriginalUri}, response::{IntoResponse, Response, Redirect, Html}, routing::get, Json, TypedHeader, headers::UserAgent, http::Uri};
+use ao3_embed::{ao3::meta::{WorkMetadata, WorkTemplate}, EmbedRequest};
+use axum::{Router, extract::{State, Path, OriginalUri, Query}, response::{IntoResponse, Response, Redirect, Html}, routing::get, Json, TypedHeader, headers::UserAgent, http::Uri};
 use isbot::Bots;
 use moka::future::Cache;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,7 @@ async fn main() {
     let app = Router::new()
         .route("/works/:id/*path", get(work_response))
         .route("/works/:id", get(work_response))
-        .route("/oembed/:id/:author/:words/:chapters/:total_chapters/:date", get(embed_response))
+        .route("/oembed", get(embed_response))
         .fallback(ao3_redirect)
         .layer(NormalizePathLayer::trim_trailing_slash())
         .with_state(state);
@@ -58,7 +58,7 @@ async fn work_response(
     let bots = Bots::default();
     
     if !bots.is_bot(user_agent.as_str()) {
-        tracing::info!("IS BOT: Redirecting");
+        tracing::info!("IS NOT BOT: Redirecting");
         return Redirect::temporary(&redirect_url).into_response();
     }
 
@@ -69,7 +69,7 @@ async fn work_response(
             tracing::info!("Using cached for {}", id);
             Some(work)
         },
-        None => match WorkMetadata::work(id,&redirect_url).await {
+        None => match WorkMetadata::work(id, &redirect_url).await {
             Ok(work) => {
                 work_cache.insert(id, work.clone()).await;
 
@@ -77,7 +77,10 @@ async fn work_response(
 
                 Some(work)
             },
-            Err(_) => None,
+            Err(err) => {
+                tracing::error!("Recieved {} for id {}.", err, id);
+                None
+            },
         }
     }) else {
         tracing::warn!("Could not retrieve meta.");
@@ -105,18 +108,8 @@ struct EmbedResponse {
     pub provider_url: String,
 }
 
-#[derive(Deserialize)]
-struct EmbedRequest {
-    pub id: u64,
-    pub author: String,
-    pub words: u64,
-    pub chapters: u16,
-    pub total_chapters: String,
-    pub date: String,
-}
-
 async fn embed_response(
-    Path(EmbedRequest { id, author, words, chapters, total_chapters, date }): Path<EmbedRequest>,
+    Query(EmbedRequest { id, author, words, chapters, total_chapters, date }): Query<EmbedRequest>,
 ) -> Json<EmbedResponse> {
     tracing::info!("Embed Request ID: {}", id);
     Json(EmbedResponse {
