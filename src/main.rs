@@ -78,7 +78,7 @@ async fn work_response(
                 Some(work)
             },
             Err(err) => {
-                tracing::error!("Recieved {} for id {}.", err, id);
+                tracing::error!("Recieved `{}` for id {}.", err, id);
                 None
             },
         }

@@ -203,19 +203,9 @@ impl WorkMetadata {
             .ok_or(WorkError::WorkError)?
             .to_string();
 
-        let rating = get_tags(select_one(&meta, &RATING)?)
-            .next()
-            .ok_or(WorkError::WorkError)?
-            .text;
-
         let warnings = get_tags(select_one(&meta, &WARNING)?)
             .map(|t| t.text)
             .collect::<Vec<_>>();
-
-        let category = get_tags(select_one(&meta, &CATEGORY)?)
-            .next()
-            .ok_or(WorkError::WorkError)?
-            .text;
 
         let fandoms = get_tags(select_one(&meta, &FANDOMS)?)
             .map(|t| t.text)
@@ -232,12 +222,6 @@ impl WorkMetadata {
         let freeforms = get_tags(select_one(&meta, &FREEFORMS)?)
             .map(|t| t.text)
             .collect::<Vec<_>>();
-
-        // let language = get_tags(select_one(&meta, &LANGUAGE)?)
-        //     .next()
-        //     .ok_or(WorkError::WorkError)?
-        //     .text;
-
 
         let published_date = select_one(&stats, &PUBLISHED_DATE)?.inner_html();
         let words = select_one(&stats, &WORDS)?.inner_html().replace(",", "").parse::<u64>()?;
