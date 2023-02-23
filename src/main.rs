@@ -53,11 +53,13 @@ async fn work_response(
     State(work_cache): State<Arc<Cache<u64, WorkMetadata>>>,
     TypedHeader(user_agent): TypedHeader<UserAgent>,
 ) -> Response {
+    let redirect_url = format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")));
+
     let bots = Bots::default();
     
     if !bots.is_bot(user_agent.as_str()) {
         tracing::info!("IS BOT: Redirecting");
-        return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
+        return Redirect::temporary(&redirect_url).into_response();
     }
 
     let work_cache = work_cache.clone();
@@ -67,7 +69,7 @@ async fn work_response(
             tracing::info!("Using cached for {}", id);
             Some(work)
         },
-        None => match WorkMetadata::work(id).await {
+        None => match WorkMetadata::work(id,&redirect_url).await {
             Ok(work) => {
                 work_cache.insert(id, work.clone()).await;
 
@@ -79,14 +81,14 @@ async fn work_response(
         }
     }) else {
         tracing::warn!("Could not retrieve meta.");
-        return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
+        return Redirect::temporary(&redirect_url).into_response();
     };
 
     let template: WorkTemplate = work.into();
 
     let Ok(html) = template.render_html() else {
         tracing::warn!("Error templating meta.");
-        return Redirect::temporary(&format!("https://archiveofourown.org/works/{}/{}", id, path.unwrap_or_else(|| String::from("")))).into_response();
+        return Redirect::temporary(&redirect_url).into_response();
     };
 
     Html(html).into_response()

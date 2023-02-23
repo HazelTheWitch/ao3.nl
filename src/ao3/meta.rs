@@ -38,8 +38,10 @@ lazy_static! {
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkMetadata {
     pub id: u64,
+    pub redirect_url: String,
     pub title: String,
     pub author: String,
+    pub author_url: String,
     pub published_date: String,
     pub fandoms: Vec<String>,
     pub warnings: Vec<String>,
@@ -62,35 +64,39 @@ fn join_quoted(strings: Vec<String>) -> String {
 #[template(path = "work.html")]
 pub struct WorkTemplate {
     pub id: u64,
+    pub redirect_url: String,
+    pub author_url: String,
     pub title: String,
     pub author: String,
     pub description: String,
     pub embed_url: String,
 }
 
-impl Into<WorkTemplate> for WorkMetadata {
-    fn into(self) -> WorkTemplate {
+impl From<WorkMetadata> for WorkTemplate {
+    fn from(work: WorkMetadata) -> Self {
         let embed_url = format!(
             "{}/oembed/{}/{}/{}/{}/{}/{}",
             env::var("HOST").unwrap_or_else(|_| String::from("http://localhost:3000")),
-            self.id,
-            urlencoding::encode(&self.author),
-            self.words,
-            self.chapter,
-            self.total_chapters
+            work.id,
+            urlencoding::encode(&work.author),
+            work.words,
+            work.chapter,
+            work.total_chapters
                 .map(|c| c.to_string())
                 .unwrap_or_else(|| String::from("?")),
-            urlencoding::encode(&self.published_date)
+            urlencoding::encode(&work.published_date)
         );
 
-        WorkTemplate {
-            id: self.id,
-            title: self.title,
-            author: self.author,
+        Self {
+            id: work.id,
+            redirect_url: work.redirect_url,
+            title: work.title,
+            author: work.author,
+            author_url: work.author_url,
             description: {
-                let warnings = join_quoted(self.warnings);
-                let characters = join_quoted(self.characters);
-                let tags = join_quoted(self.tags);
+                let warnings = join_quoted(work.warnings);
+                let characters = join_quoted(work.characters);
+                let tags = join_quoted(work.tags);
 
                 format!("{}\n{}\n{}", warnings, characters, tags)
             },
@@ -163,7 +169,7 @@ fn select_one<'a>(parent: &ElementRef<'a>, selector: &'a Selector) -> Result<Ele
 }
 
 impl WorkMetadata {
-    pub async fn work(id: u64) -> Result<Self, WorkError> {
+    pub async fn work(id: u64, redirect_url: &str) -> Result<Self, WorkError> {
         let url = format!("https://archiveofourown.org/works/{}?view_adult=true", id);
 
         let html = reqwest::get(url)
@@ -186,7 +192,7 @@ impl WorkMetadata {
             .ok_or(WorkError::WorkError)?;
 
         let author = author_element.inner_html();
-        let author_link = author_element
+        let author_url = author_element
             .value()
             .attr("href")
             .ok_or(WorkError::WorkError)?
@@ -238,8 +244,10 @@ impl WorkMetadata {
 
         Ok(Self {
             id,
+            redirect_url: redirect_url.to_string(),
             title,
             author,
+            author_url,
             published_date,
             fandoms,
             warnings,
